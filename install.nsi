@@ -130,8 +130,11 @@ Section "NSIS Demo App (required)" SecApp
 
   SetOutPath "$INSTDIR"
   DetailPrint "Installing application files..."
+  Sleep 800
   File "/oname=${ENTRYPOINT}" "${SRC}\${ENTRYPOINT}"
   File "/oname=ReleaseNotes.txt" "${RELNOTES}"
+  DetailPrint "Finalizing installation..."
+  Sleep 2500
 
   CreateDirectory "$SMPROGRAMS\${COMPANYNAME}"
   CreateShortCut "$SMPROGRAMS\${COMPANYNAME}\${APPNAME}.lnk" "$INSTDIR\${ENTRYPOINT}"
