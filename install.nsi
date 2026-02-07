@@ -3,7 +3,9 @@
 ;
 ; Companion project for a blog post touring NSIS features. Demonstrates:
 ;   - Modern UI 2 page flow, including an optional-components page
+;   - A custom nsDialogs page that reads release notes from a plain-text file at build time
 ;   - Conditional installation of the VC++ Redistributable (skipped if already present)
+;   - Previous-install detection and cleanup
 ;   - A full uninstaller with Add/Remove Programs registration
 ;
 ; https://github.com/treideme/nsis-demo
@@ -20,6 +22,9 @@
 !ifndef SRC
   !define SRC "stage"
 !endif
+!ifndef RELNOTES
+  !define RELNOTES "stage\ReleaseNotes.txt"
+!endif
 !ifndef OUT
   !define OUT "NsisDemoSetup.exe"
 !endif
@@ -29,6 +34,8 @@ SetCompressor /FINAL lzma
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+!include "nsDialogs.nsh"
+!include "WinMessages.nsh"
 
 ;----------------------------------------------------------------------------------------------------------------------
 ; Distribution settings
@@ -54,9 +61,46 @@ VIProductVersion "${VERSION}.0"
 BGGradient 0000FF 000000 FFFFFF
 
 ;--------------------------------
+; Custom "Release Notes" page (nsDialogs)
+;--------------------------------
+Var ReleaseNotesText
+
+Function ReleaseNotesPageCreate
+  nsDialogs::Create 1018
+  Pop $0
+
+  ${NSD_CreateLabel} 0 0 100% 12u "What's new in ${APPNAME} ${VERSION}:"
+  Pop $1
+
+  nsDialogs::CreateControl EDIT "${DEFAULT_STYLES}|${ES_MULTILINE}|${ES_AUTOVSCROLL}|${ES_READONLY}|${WS_VSCROLL}" ${WS_EX_CLIENTEDGE} 0 15u 100% 190u ""
+  Pop $ReleaseNotesText
+
+  StrCpy $4 ""
+  ClearErrors
+  FileOpen $2 "${RELNOTES}" r
+  IfErrors notes_missing
+
+  notes_loop:
+    FileRead $2 $3
+    IfErrors notes_done
+    StrCpy $4 "$4$3"
+    Goto notes_loop
+  notes_done:
+    FileClose $2
+    ${NSD_SetText} $ReleaseNotesText "$4"
+    Goto notes_end
+  notes_missing:
+    ${NSD_SetText} $ReleaseNotesText "(No release notes found for this build.)"
+  notes_end:
+
+  nsDialogs::Show
+FunctionEnd
+
+;--------------------------------
 ; Pages
 ;--------------------------------
 !insertmacro MUI_PAGE_WELCOME
+Page custom ReleaseNotesPageCreate
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -73,9 +117,21 @@ BGGradient 0000FF 000000 FFFFFF
 Section "NSIS Demo App (required)" SecApp
   SectionIn RO
 
+  ; A well-behaved installer always installs to the same, deterministic path, so
+  ; detecting a previous install is just a matter of checking whether it's there -
+  ; no filesystem-wide search plugin needed for the common case.
+  IfFileExists "$INSTDIR\${ENTRYPOINT}" 0 NoOldInstall
+    DetailPrint "Previous installation found at $INSTDIR, removing..."
+    ClearErrors
+    RMDir /r "$INSTDIR"
+    IfErrors 0 NoOldInstall
+      DetailPrint "Could not fully remove the previous installation (in use?). Continuing anyway."
+  NoOldInstall:
+
   SetOutPath "$INSTDIR"
   DetailPrint "Installing application files..."
   File "/oname=${ENTRYPOINT}" "${SRC}\${ENTRYPOINT}"
+  File "/oname=ReleaseNotes.txt" "${RELNOTES}"
 
   CreateDirectory "$SMPROGRAMS\${COMPANYNAME}"
   CreateShortCut "$SMPROGRAMS\${COMPANYNAME}\${APPNAME}.lnk" "$INSTDIR\${ENTRYPOINT}"
@@ -109,6 +165,7 @@ SectionEnd
 ;--------------------------------
 Section "Uninstall"
   Delete "$INSTDIR\${ENTRYPOINT}"
+  Delete "$INSTDIR\ReleaseNotes.txt"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
 

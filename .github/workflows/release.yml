@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Determine version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          if (-not (Test-Path "releasenotes\$version.md")) {
+            throw "No releasenotes\$version.md found for tag ${{ github.ref_name }} - add release notes before tagging."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Stage payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path stage | Out-Null
+          Copy-Item "$env:WINDIR\System32\notepad.exe" stage\nsisdemo.exe
+          Copy-Item "releasenotes\${{ steps.version.outputs.version }}.md" stage\ReleaseNotes.txt
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile stage\vc_redist.x64.exe
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\NSIS\makensis.exe" `
+            "/DVERSION=${{ steps.version.outputs.version }}" `
+            "/DSRC=stage" `
+            "/DRELNOTES=stage\ReleaseNotes.txt" `
+            "/DOUT=NsisDemoSetup-${{ steps.version.outputs.version }}.exe" `
+            install.nsi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "NsisDemoSetup-${{ steps.version.outputs.version }}.exe" `
+            "releasenotes/${{ steps.version.outputs.version }}.md" `
+            --title "NSIS Demo ${{ steps.version.outputs.version }}" `
+            --notes-file "releasenotes/${{ steps.version.outputs.version }}.md"

@@ -25,6 +25,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path stage | Out-Null
           Copy-Item "$env:WINDIR\System32\notepad.exe" stage\nsisdemo.exe
+          Copy-Item "releasenotes\${{ steps.version.outputs.version }}.md" stage\ReleaseNotes.txt
           Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile stage\vc_redist.x64.exe
 
       - name: Compile installer
@@ -33,6 +34,7 @@ jobs:
           & "C:\Program Files (x86)\NSIS\makensis.exe" `
             "/DVERSION=${{ steps.version.outputs.version }}" `
             "/DSRC=stage" `
+            "/DRELNOTES=stage\ReleaseNotes.txt" `
             install.nsi
 
       - name: Run the installer in GUI mode and screenshot mid-install
@@ -60,7 +62,8 @@ jobs:
             }
           }
 
-          # Welcome -> Components -> Directory (triggers Install)
+          # Welcome -> Release Notes -> Components -> Directory (triggers Install)
+          Advance; Start-Sleep -Seconds 1
           Advance; Start-Sleep -Seconds 1
           Advance; Start-Sleep -Seconds 1
           Advance
