@@ -20,6 +20,9 @@ jobs:
             Sort-Object | Select-Object -Last 1
           "version=$latest" >> $env:GITHUB_OUTPUT
 
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+
       - name: Stage payload
         shell: pwsh
         run: |
