@@ -1,0 +1,112 @@
+name: Build and Test Installer
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          $latest = Get-ChildItem releasenotes -Filter *.md |
+            ForEach-Object { [version]($_.BaseName) } |
+            Sort-Object | Select-Object -Last 1
+          "version=$latest" >> $env:GITHUB_OUTPUT
+
+      - name: Stage payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path stage | Out-Null
+          Copy-Item "$env:WINDIR\System32\notepad.exe" stage\nsisdemo.exe
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile stage\vc_redist.x64.exe
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\NSIS\makensis.exe" `
+            "/DVERSION=${{ steps.version.outputs.version }}" `
+            "/DSRC=stage" `
+            install.nsi
+
+      - name: Run the installer in GUI mode and screenshot mid-install
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          Add-Type -Name Win32 -Namespace Native -MemberDefinition @"
+            [DllImport("user32.dll")]
+            public static extern bool SetForegroundWindow(System.IntPtr hWnd);
+          "@
+
+          $proc = Start-Process -FilePath .\NsisDemoSetup.exe -PassThru
+
+          function Advance {
+            for ($i = 0; $i -lt 20; $i++) {
+              if ($proc.HasExited) { return }
+              $proc.Refresh()
+              if ($proc.MainWindowHandle -ne 0) {
+                [Native.Win32]::SetForegroundWindow($proc.MainWindowHandle) | Out-Null
+                Start-Sleep -Milliseconds 300
+                [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+                return
+              }
+              Start-Sleep -Milliseconds 300
+            }
+          }
+
+          # Welcome -> Components -> Directory (triggers Install)
+          Advance; Start-Sleep -Seconds 1
+          Advance; Start-Sleep -Seconds 1
+          Advance
+
+          # Give the install a moment to actually be underway, then grab the screenshot
+          Start-Sleep -Seconds 2
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save("$pwd\install-screenshot.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          $graphics.Dispose(); $bitmap.Dispose()
+
+          # Keep clicking through (Finish page) until the wizard closes
+          $deadline = (Get-Date).AddMinutes(3)
+          while (-not $proc.HasExited -and (Get-Date) -lt $deadline) {
+            Advance
+            Start-Sleep -Seconds 2
+          }
+          $proc.WaitForExit(30000)
+          if (-not $proc.HasExited) { throw "Installer did not exit in time" }
+
+      - name: Verify installation
+        shell: pwsh
+        run: |
+          $installDir = "$env:ProgramFiles\Reidemeister Labs\NSIS Demo"
+          if (-not (Test-Path "$installDir\nsisdemo.exe")) { throw "App payload was not installed" }
+          if (-not (Test-Path "$installDir\Uninstall.exe")) { throw "Uninstaller was not written" }
+          $vc = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" -ErrorAction SilentlyContinue
+          if (-not $vc -or $vc.Installed -ne 1) { throw "VC++ Redistributable was not detected after install" }
+          Compress-Archive -Path "$installDir\*" -DestinationPath installed-files.zip
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: NsisDemoSetup.exe
+
+      - name: Upload install screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-screenshot
+          path: install-screenshot.png
+
+      - name: Upload installed files
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-files
+          path: installed-files.zip
