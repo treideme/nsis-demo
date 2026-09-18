@@ -104,15 +104,18 @@ jobs:
         with:
           name: installer
           path: NsisDemoSetup.exe
+          retention-days: 1
 
       - name: Upload install screenshot
         uses: actions/upload-artifact@v7
         with:
           name: install-screenshot
           path: install-screenshot.png
+          retention-days: 1
 
       - name: Upload installed files
         uses: actions/upload-artifact@v7
         with:
           name: installed-files
           path: installed-files.zip
+          retention-days: 1
