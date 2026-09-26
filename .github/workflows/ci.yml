@@ -324,7 +324,7 @@ jobs:
             public static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
             [DllImport("user32.dll")]
             public static extern bool SetForegroundWindow(IntPtr hWnd);
-'@
+          '@
           [Native.Win]::SetForegroundWindow($proc.MainWindowHandle) | Out-Null
           Start-Sleep -Milliseconds 500
 
