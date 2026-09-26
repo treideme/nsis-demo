@@ -63,14 +63,25 @@ EXCLUDE_MODULES = [
     "unittest",
     "pydoc_data",
     "lib2to3",
-    # ✅ FROM THE WINDOWS TOC DUMP, not from a guess. libcrypto-3.dll is
-    # 5.1 MB and libssl-3.dll follows it, collected because PyInstaller found
-    # Python's _ssl -- in an application that opens no sockets. Nothing here
-    # imports ssl, directly or through PySide6.
+    # ✅ FROM THE WINDOWS TOC DUMP, not from a guess. libssl-3.dll is collected
+    # because PyInstaller found Python's _ssl, in an application that opens no
+    # sockets.
     "ssl",
     "_ssl",
-    "hashlib",
-    "_hashlib",
+    # 🔴 AND HERE IS WHERE THAT STOPS. `hashlib` and `_hashlib` were on this
+    # list for one run and the frozen application died on startup with
+    # 0xC0000409, a fast-fail with no message and nothing in the log.
+    #
+    # The reason is one line in the standard library:
+    #
+    #     random.py:  from hashlib import sha512 as _sha512
+    #
+    # So excluding hashlib breaks `import random`, and random is imported all
+    # over the stdlib. ⚠️ **libcrypto-3.dll, at 5.1 MB, is therefore NOT
+    # prunable**: _hashlib links it as well as _ssl, and _hashlib has to stay.
+    # A hello-world GUI application ships 5 MB of OpenSSL because random wants
+    # a SHA-512, and there is no exclusion that fixes it.
+    #     "hashlib", "_hashlib",   <- do not
 ]
 
 # --- binaries and data to drop, matched as stems -----------------------------
