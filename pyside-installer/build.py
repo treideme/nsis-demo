@@ -107,13 +107,28 @@ def compile_installer(version):
         return None
 
     out = os.path.join(DIST, "HelloNsisSetup.exe")
-    run([makensis,
-         "/DVERSION=%s" % version,
-         "/DSRC=%s" % os.path.join(DIST, "HelloNsis"),
-         "/DLICENSE_APP=%s" % os.path.join(os.path.dirname(HERE), "LICENSE"),
-         "/DLICENSE_THIRDPARTY=%s" % MANIFEST,
-         "/DOUT=%s" % out,
-         os.path.join(PACKAGING, "installer.nsi")])
+    argv = [makensis,
+            "/DVERSION=%s" % version,
+            "/DSRC=%s" % os.path.join(DIST, "HelloNsis"),
+            "/DLICENSE_APP=%s" % os.path.join(os.path.dirname(HERE), "LICENSE"),
+            "/DLICENSE_THIRDPARTY=%s" % MANIFEST,
+            "/DOUT=%s" % out]
+
+    # 🔴 The redistributable's presence has to be decided HERE, not in the NSIS
+    # script. `File` is a compile-time directive, so `${If} ${FileExists}` cannot
+    # guard it -- makensis embeds the file while compiling and fails the build on
+    # a missing path regardless of any runtime condition. Passing the define
+    # conditionally moves the decision to a language that can make it.
+    redist = os.path.join(HERE, "vc_redist.x64.exe")
+    if os.path.exists(redist):
+        argv.append("/DVCREDIST=%s" % redist)
+        print("[build] chain-installing %s" % os.path.basename(redist))
+    else:
+        print("[build] no vc_redist.x64.exe staged; the installer will not "
+              "chain-install one. Put it at %s to enable that path." % redist)
+
+    argv.append(os.path.join(PACKAGING, "installer.nsi"))
+    run(argv)
     print("[build] installer -> %s" % out)
     return out
 

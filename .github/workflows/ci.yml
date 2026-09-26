@@ -165,6 +165,11 @@ jobs:
 
       - name: Build application, manifest and installer
         working-directory: pyside-installer
+        env:
+          # Prints the largest surviving entries with their dest paths. On while
+          # the Windows exclusions are being tuned -- the counts alone cannot
+          # tell you WHICH pattern failed to match.
+          HELLO_DUMP_TOC: '1'
         run: python build.py
 
       - name: Smoke-test the frozen application

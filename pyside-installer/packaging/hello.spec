@@ -131,15 +131,27 @@ DROP_EXES = [
 # a support risk rather than getting it free.
 DROP_SOFTWARE_OPENGL = False
 
-# Whole collected directories with no bearing on a widgets-only application.
-DROP_DIRS = [
-    os.path.join("PySide6", "Qt", "qml"),
-    os.path.join("PySide6", "Qt", "translations"),
-    os.path.join("PySide6", "Qt", "plugins", "sqldrivers"),
-    os.path.join("PySide6", "Qt", "plugins", "multimedia"),
-    os.path.join("PySide6", "Qt", "plugins", "virtualkeyboard"),
-    os.path.join("PySide6", "Qt", "plugins", "qmltooling"),
-    os.path.join("PySide6", "Qt", "plugins", "designer"),
+# 🔴 DIRECTORIES ARE MATCHED BY SEGMENT, NOT BY PREFIX, AND THAT IS NOT
+# PEDANTRY. The first version of this list used full prefixes copied from a
+# Linux build -- `PySide6/Qt/qml`, `PySide6/Qt/translations`. On Windows the
+# wheel puts those at `PySide6/qml` and `PySide6/translations`, one level up.
+#
+# Measured on a Windows runner 2026-09-26: the prefix form dropped
+# **datas 97 -> 97**, which is to say nothing at all, while the same spec on
+# Linux dropped 105 data entries. The build was green both times.
+#
+# ⚠️ This is the exact failure this file's own docstring claims to avoid. Stems
+# were platform-independent; the directory list was not, and "one list serves
+# both platforms" was half true in a way no Linux run could reveal.
+DROP_SEGMENTS = [
+    "qml",              # 1,762 files / 19.0 MB in the Windows wheel
+    "translations",     # 196 files / 13.1 MB
+    "sqldrivers",
+    "multimedia",
+    "virtualkeyboard",
+    "qmltooling",
+    "designer",
+    "webengine",
 ]
 
 
@@ -161,7 +173,8 @@ def unwanted(dest):
         return True
     if any(stem.lower() in base for stem in DROP_STEMS):
         return True
-    return any(d.replace("\\", "/").lower() + "/" in flat + "/" for d in DROP_DIRS)
+    # Whole path components, so the depth of the layout does not matter.
+    return any(seg in flat.split("/")[:-1] for seg in DROP_SEGMENTS)
 
 
 # PyInstaller 6 dropped `cipher`, `win_no_prefer_redirects` and
@@ -193,6 +206,22 @@ after = (len(a.binaries), len(a.datas))
 removed = (before[0] - after[0]) + (before[1] - after[1])
 print("[spec] binaries %d -> %d, datas %d -> %d (%d entries dropped)"
       % (before[0], after[0], before[1], after[1], removed))
+
+# ✅ Set HELLO_DUMP_TOC=1 to print what SURVIVED, largest first. Added because
+# the exclusion list silently matched nothing on Windows while the build stayed
+# green: the counts above tell you something is wrong, and only the dest paths
+# tell you what. Cheap, off by default, and the first thing to reach for when a
+# bundle is the wrong size on a platform you cannot run locally.
+if os.environ.get("HELLO_DUMP_TOC"):
+    rows = []
+    for dest, src, _kind in list(a.binaries) + list(a.datas):
+        try:
+            rows.append((os.path.getsize(src), dest))
+        except OSError:
+            rows.append((0, dest))
+    print("[spec] %d entries survive, largest 30:" % len(rows))
+    for size, dest in sorted(rows, reverse=True)[:30]:
+        print("[spec]   %9.2f KB  %s" % (size / 1024.0, dest))
 
 # 🔴 A pattern list that matches nothing is indistinguishable from a tidy build.
 # Fail here instead: a wrong stem, a renamed directory or a Qt reorganisation all

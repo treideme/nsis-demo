@@ -191,21 +191,33 @@ Section "Visual C++ Runtime" SecVCRedist
   ; mode is an application that will not start, with an error naming the Python
   ; bundle rather than the installer script that used to fix it -- which is
   ; exactly the wrong place to go looking.
+  ; 🔴 `${FileExists}` IS A RUNTIME CHECK AND CANNOT GUARD `File`, WHICH IS A
+  ; COMPILE-TIME DIRECTIVE. The first version of this section wrapped the File
+  ; below in ${If} ${FileExists} and looked perfectly reasonable. makensis
+  ; evaluates File while compiling, ignores the runtime condition entirely, and
+  ; failed the build with "no files found" on a path that would only have been
+  ; consulted at install time.
+  ;
+  ; The two languages in this file are easy to confuse: `!` directives and
+  ; `${...}` defines run in the preprocessor, everything else runs on the user's
+  ; machine. So the existence decision is made by build.py, which passes
+  ; /DVCREDIST only when the file is actually staged, and `!ifdef` keeps the
+  ; embedding out of the compiled installer otherwise.
+!ifdef VCREDIST
   SetRegView 64
   ReadRegDWORD $0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" "Installed"
   ${If} $0 == 1
     DetailPrint "Visual C++ Runtime already present -- skipping."
   ${Else}
-    ${If} ${FileExists} "${SRC}\..\vc_redist.x64.exe"
-      DetailPrint "Installing the Visual C++ Runtime..."
-      SetOutPath "$PLUGINSDIR"
-      File "${SRC}\..\vc_redist.x64.exe"
-      ExecWait '"$PLUGINSDIR\vc_redist.x64.exe" /install /quiet /norestart' $1
-      DetailPrint "Visual C++ Runtime installer returned $1"
-    ${Else}
-      DetailPrint "vc_redist.x64.exe was not staged -- skipping."
-    ${EndIf}
+    DetailPrint "Installing the Visual C++ Runtime..."
+    SetOutPath "$PLUGINSDIR"
+    File "${VCREDIST}"
+    ExecWait '"$PLUGINSDIR\vc_redist.x64.exe" /install /quiet /norestart' $1
+    DetailPrint "Visual C++ Runtime installer returned $1"
   ${EndIf}
+!else
+  DetailPrint "Built without a staged vc_redist.x64.exe -- nothing to chain-install."
+!endif
 SectionEnd
 
 ;----------------------------------------------------------------------------------------------------------------------
