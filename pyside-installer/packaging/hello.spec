@@ -108,6 +108,8 @@ DROP_STEMS = [
     # 1.9 MB. ⚠️ If Qt6Gui imports it statically on Windows this will fail at
     # startup with a named missing-DLL error, which the screenshot step catches.
     "Qt6OpenGL",
+    # 0.59 MB, and only the qsvg/qsvgicon plugins above use it.
+    "Qt6Svg",
 ]
 
 # Windows ships TWO platform plugins and needs one. qdirect2d is the Direct2D
@@ -189,6 +191,13 @@ DROP_SEGMENTS = [
     "qmltooling",
     "designer",
     "webengine",
+    # ✅ 2.2 MB of image codecs -- qjpeg, qwebp, qtiff, qgif, qicns, qtga, qsvg
+    # -- in an application whose entire interface is four text labels. Qt loads
+    # these lazily when something asks it to decode an image, and nothing here
+    # ever does. ⚠️ Add them back the moment this window grows an icon or a
+    # QPixmap: the failure is a silently blank image, not an error.
+    "imageformats",
+    "iconengines",
 ]
 
 
