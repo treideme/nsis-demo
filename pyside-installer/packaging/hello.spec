@@ -160,7 +160,13 @@ DROP_EXES = [
 #
 # Set it True if you know your fleet, and know that you are buying 19.7 MB with
 # a support risk rather than getting it free.
-DROP_SOFTWARE_OPENGL = False
+# ⚠️ FLIPPED TO TRUE 2026-09-26, and the CI screenshot is what justifies it.
+# A GitHub Windows runner has no GPU, so it is the exact machine this fallback
+# exists for. If the window renders there without opengl32sw.dll, a widgets-only
+# application really is going through the raster engine and the 19.7 MB is dead
+# weight. If it does not, the screenshot step fails and this goes back to False
+# -- which is a better answer than either guess.
+DROP_SOFTWARE_OPENGL = True
 
 # 🔴 DIRECTORIES ARE MATCHED BY SEGMENT, NOT BY PREFIX, AND THAT IS NOT
 # PEDANTRY. The first version of this list used full prefixes copied from a

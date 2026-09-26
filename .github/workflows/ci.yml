@@ -313,10 +313,36 @@ jobs:
           if ($proc.MainWindowHandle -eq 0) { throw "no main window appeared within 20 s" }
           Start-Sleep -Seconds 2    # let the first paint settle
 
-          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          # ⚠️ Capture the WINDOW, not the desktop. A full-screen grab on a CI
+          # runner is mostly somebody else's log output, and on any other machine
+          # it is whatever the operator had open -- which is how an ordinary
+          # screenshot ends up publishing a desktop. Crop at the source.
+          Add-Type -Name Win -Namespace Native -MemberDefinition @'
+            [StructLayout(LayoutKind.Sequential)]
+            public struct RECT { public int Left, Top, Right, Bottom; }
+            [DllImport("user32.dll")]
+            public static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
+            [DllImport("user32.dll")]
+            public static extern bool SetForegroundWindow(IntPtr hWnd);
+'@
+          [Native.Win]::SetForegroundWindow($proc.MainWindowHandle) | Out-Null
+          Start-Sleep -Milliseconds 500
+
+          $r = New-Object Native.Win+RECT
+          if (-not [Native.Win]::GetWindowRect($proc.MainWindowHandle, [ref]$r)) {
+            throw "could not read the window rectangle"
+          }
+          $pad = 12
+          $x = [Math]::Max(0, $r.Left - $pad)
+          $y = [Math]::Max(0, $r.Top - $pad)
+          $w = ($r.Right - $r.Left) + 2 * $pad
+          $h = ($r.Bottom - $r.Top) + 2 * $pad
+          if ($w -lt 50 -or $h -lt 50) { throw "window rectangle is implausible: ${w}x${h}" }
+          Write-Host ("window at {0},{1} size {2}x{3}" -f $r.Left, $r.Top, ($r.Right-$r.Left), ($r.Bottom-$r.Top))
+
+          $bmp = New-Object System.Drawing.Bitmap $w, $h
           $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $g.CopyFromScreen($x, $y, 0, 0, (New-Object System.Drawing.Size $w, $h))
           $bmp.Save("$env:GITHUB_WORKSPACE\app-screenshot.png",
                     [System.Drawing.Imaging.ImageFormat]::Png)
           $g.Dispose(); $bmp.Dispose()
