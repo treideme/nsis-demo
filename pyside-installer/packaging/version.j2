@@ -1,0 +1,43 @@
+# Rendered by build.py into a PyInstaller version resource. Do not edit the
+# generated file; edit this template or app/version.py.
+#
+# WHY A TEMPLATE AT ALL: Windows wants the version four times, in two different
+# shapes -- a (major, minor, patch, build) tuple for the binary fields and a
+# string for the human-readable ones -- and PyInstaller will not derive either
+# from your package. Writing them by hand is how an executable ends up
+# disagreeing with the installer that wrapped it.
+VSVersionInfo(
+    ffi=FixedFileInfo(
+        filevers=({{ major }}, {{ minor }}, {{ patch }}, 0),
+        prodvers=({{ major }}, {{ minor }}, {{ patch }}, 0),
+        mask=0x3F,
+        flags=0x0,
+        OS=0x40004,
+        fileType=0x1,
+        subtype=0x0,
+        date=(0, 0),
+    ),
+    kids=[
+        StringFileInfo(
+            [
+                StringTable(
+                    "040904B0",
+                    [
+                        StringStruct("CompanyName", "{{ publisher }}"),
+                        StringStruct("FileDescription", "{{ description }}"),
+                        StringStruct("FileVersion", "{{ version }}"),
+                        StringStruct("InternalName", "{{ exe_name }}"),
+                        StringStruct("OriginalFilename", "{{ exe_name }}.exe"),
+                        StringStruct("ProductName", "{{ product }}"),
+                        StringStruct("ProductVersion", "{{ version }}"),
+                        StringStruct("LegalCopyright", "{{ copyright }}"),
+                    ],
+                )
+            ]
+        ),
+        # 0x0409 = en-US, 0x04B0 = Unicode. The StringTable key above is the
+        # same pair as hex, and the two must agree or the resource is ignored
+        # without complaint.
+        VarFileInfo([VarStruct("Translation", [0x0409, 0x04B0])]),
+    ],
+)

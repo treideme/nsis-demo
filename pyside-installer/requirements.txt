@@ -1,0 +1,8 @@
+# Runtime. PySide6 pulls PySide6-Essentials, PySide6-Addons and shiboken6.
+PySide6==6.11.2
+
+# Build only. These are in packaging/licenses.py's BUILD_ONLY set, so they are
+# named as not-redistributed in one place and excluded from the manifest in
+# another -- keep the two in step if you change this file.
+pyinstaller==6.22.3
+Jinja2==3.1.6
