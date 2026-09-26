@@ -181,9 +181,15 @@ jobs:
           # print() goes nowhere, a pipe returns an empty string, and the exit
           # code is still 0. Grepping that output passes vacuously on a bundle
           # that is broken. So --report writes to a file instead.
+          # 🔴 AND `&` DOES NOT WAIT FOR IT. This is built for the Windows GUI
+          # subsystem, so the shell launches it and returns immediately:
+          # $LASTEXITCODE is never set, `$null -ne 0` is true, and the check
+          # fails with the empty string in the message. Start-Process -Wait is
+          # the only form that both blocks and yields a real exit code.
           $report = "$env:RUNNER_TEMP\version.txt"
-          & .\dist\HelloNsis\HelloNsis.exe --report $report
-          if ($LASTEXITCODE -ne 0) { throw "frozen application exited $LASTEXITCODE" }
+          $p = Start-Process -FilePath .\dist\HelloNsis\HelloNsis.exe `
+            -ArgumentList '--report', $report -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "frozen application exited $($p.ExitCode)" }
           if (-not (Test-Path $report)) { throw "the application produced no report file" }
           $out = Get-Content $report -Raw
           Write-Host $out
@@ -269,7 +275,9 @@ jobs:
           # 🔴 And run what was installed, not what was built. These are
           # different files by the time the installer has been through them.
           $report = "$env:RUNNER_TEMP\installed.txt"
-          & "$installDir\HelloNsis.exe" --report $report
+          $p = Start-Process -FilePath "$installDir\HelloNsis.exe" `
+            -ArgumentList '--report', $report -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installed application exited $($p.ExitCode)" }
           if (-not (Test-Path $report)) { throw "the installed application produced no report" }
           $out = Get-Content $report -Raw
           Write-Host $out

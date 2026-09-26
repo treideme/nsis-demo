@@ -63,6 +63,14 @@ EXCLUDE_MODULES = [
     "unittest",
     "pydoc_data",
     "lib2to3",
+    # ✅ FROM THE WINDOWS TOC DUMP, not from a guess. libcrypto-3.dll is
+    # 5.1 MB and libssl-3.dll follows it, collected because PyInstaller found
+    # Python's _ssl -- in an application that opens no sockets. Nothing here
+    # imports ssl, directly or through PySide6.
+    "ssl",
+    "_ssl",
+    "hashlib",
+    "_hashlib",
 ]
 
 # --- binaries and data to drop, matched as stems -----------------------------
@@ -85,6 +93,18 @@ DROP_STEMS = [
     "Qt6Test",
     "Qt6Designer",
     "Qt63D",
+    # ✅ The binding is excluded above, so the library has nothing to bind to.
+    # 1.9 MB. ⚠️ If Qt6Gui imports it statically on Windows this will fail at
+    # startup with a named missing-DLL error, which the screenshot step catches.
+    "Qt6OpenGL",
+]
+
+# Windows ships TWO platform plugins and needs one. qdirect2d is the Direct2D
+# alternative, 1.0 MB; qwindows is the default and is the one that must never be
+# pruned. ⚠️ Dropping qdirect2d is safe only while qwindows stays -- CI asserts
+# qwindows is present for exactly this reason.
+DROP_PLUGINS = [
+    "qdirect2d.dll",
 ]
 
 # ✅ WINDOWS-ONLY, AND THE BIGGEST SINGLE WIN AVAILABLE. Read out of the
@@ -168,6 +188,8 @@ def unwanted(dest):
     if base in [f.lower() for f in DROP_FILES]:
         return True
     if base in [f.lower() for f in DROP_EXES]:
+        return True
+    if base in [f.lower() for f in DROP_PLUGINS]:
         return True
     if DROP_SOFTWARE_OPENGL and base == "opengl32sw.dll":
         return True
