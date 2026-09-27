@@ -1,6 +1,6 @@
 # Hello NSIS : PySide6 application behind an NSIS installer
 
-Please see [my blog](https://reidemeister.com/blog/2026.02.07) for details. 
+Please see [my blog](https://reidemeister.com/blog/2026.02.07) for details.
 
 The installer at the repository root wraps `notepad.exe`. That keeps it honest
 about what NSIS itself does, and it sidesteps the question anyone shipping
@@ -55,17 +55,26 @@ plus the opt-in below      138.1 MB    (68%)
 
 ### Windows-specific optimization
 
-**Qt ships its own IDE tooling: 14 executables, 12.2 MB.** 
+**Qt ships its own IDE tooling: 14 executables, 12.2 MB.**
 None belongs in a distributed
 application.
 
-**`opengl32sw.dll` is 19.7 MB, larger than `Qt6Core.dll`**. It is the 
-Mesa llvmpipe software OpenGL fallback, used
-when a machine has no usable GPU driver️ **So it is the largest saving
-available and the only exclusion here that can fail on somebody else's machine.**
-A widgets app does not render through OpenGL until it lands on a VM, an RDP
-session, or a fresh install with only the Microsoft Basic Display driver.
-`DROP_SOFTWARE_OPENGL` therefore defaults to **False**.
+**`opengl32sw.dll` is 19.7 MB, larger than `Qt6Core.dll`** and the largest file
+in the wheel. It is the Mesa llvmpipe software OpenGL fallback, used when a
+machine has no usable GPU driver.
+
+That made it both the biggest saving available and the only exclusion here that
+can fail on somebody else's machine rather than on the build machine. A widgets
+application does not render through OpenGL, right up until it lands on a VM, an
+RDP session, or a fresh install carrying only the Microsoft Basic Display
+driver.
+
+`DROP_SOFTWARE_OPENGL` is **True**, and the CI screenshot is what settled it: a
+GitHub Windows runner has no GPU, so it is exactly the machine the fallback
+exists for, and the window still rendered without it. A QtWidgets application
+really does go through the raster paint engine. NOTE: that is a result about
+widgets, not a general permission -- add a `QOpenGLWidget` or any of QtQuick and
+the fallback goes back in.
 
 ## Why one directory rather than one file
 

@@ -26,7 +26,7 @@ def main(argv=None):
     # human at the screen. CI runs this, and it is the difference between
     # "the file was written" and "the bundle works".
     #
-    # 🔴 BUT `print()` IS USELESS HERE ON WINDOWS. PyInstaller builds this with
+    # BUT `print()` IS USELESS HERE ON WINDOWS. PyInstaller builds this with
     # console=False, which is correct for a GUI application and means the process
     # has no console attached: stdout goes nowhere, and a caller that pipes it
     # gets an empty string and a zero exit code. A CI check that greps that

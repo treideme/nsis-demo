@@ -124,9 +124,9 @@ jobs:
   # The second installer: a real PySide6 application rather than notepad.exe.
   #
   # Action versions checked against each project's releases API on 2026-09-26:
-  #   actions/checkout       v7.0.1  (2026-07-20)
-  #   actions/setup-python   v7.0.0  (2026-07-20)
-  #   actions/upload-artifact v7
+  # actions/checkout       v7.0.1  (2026-07-20)
+  # actions/setup-python   v7.0.0  (2026-07-20)
+  # actions/upload-artifact v7
   # Pinned to the major so fixes arrive without a commit here. If you are reading
   # this a year later, re-check rather than trusting the numbers.
   #
@@ -176,12 +176,12 @@ jobs:
         shell: pwsh
         working-directory: pyside-installer
         run: |
-          # 🔴 "the file exists" is not a test, and neither is reading stdout.
+          # "the file exists" is not a test, and neither is reading stdout.
           # This is built console=False, so the process has NO console attached:
           # print() goes nowhere, a pipe returns an empty string, and the exit
           # code is still 0. Grepping that output passes vacuously on a bundle
           # that is broken. So --report writes to a file instead.
-          # 🔴 AND `&` DOES NOT WAIT FOR IT. This is built for the Windows GUI
+          # AND `&` DOES NOT WAIT FOR IT. This is built for the Windows GUI
           # subsystem, so the shell launches it and returns immediately:
           # $LASTEXITCODE is never set, `$null -ne 0` is true, and the check
           # fails with the empty string in the message. Start-Process -Wait is
@@ -201,7 +201,7 @@ jobs:
         shell: pwsh
         working-directory: pyside-installer
         run: |
-          # 🔴 The exclusion list is a CLAIM until something checks it. A wrong
+          # The exclusion list is a CLAIM until something checks it. A wrong
           # stem silently keeps the file, the bundle grows, and the build is
           # green. These are the three groups whose absence is worth asserting,
           # because each was found surviving an earlier version of the list.
@@ -231,7 +231,7 @@ jobs:
             throw "Qt6Quick shipped in a QtWidgets-only application"
           }
 
-          # ✅ And the inverse: the platform plugin MUST be present. An
+          # And the inverse: the platform plugin MUST be present. An
           # exclusion list that removes it produces a bundle that builds
           # perfectly and cannot start.
           if (-not (Get-ChildItem $bundle -Recurse -Filter 'qwindows.dll')) {
@@ -272,7 +272,7 @@ jobs:
           $plugins = Get-ChildItem "$installDir\_internal" -Recurse -Filter 'qwindows.dll'
           if (-not $plugins) { throw "the Qt windows platform plugin was not installed" }
 
-          # 🔴 And run what was installed, not what was built. These are
+          # And run what was installed, not what was built. These are
           # different files by the time the installer has been through them.
           $report = "$env:RUNNER_TEMP\installed.txt"
           $p = Start-Process -FilePath "$installDir\HelloNsis.exe" `
@@ -286,12 +286,12 @@ jobs:
       - name: Photograph the installed application
         shell: pwsh
         run: |
-          # 🔴 THE POINT OF THIS STEP. Every check before it proves the bundle
+          # THE POINT OF THIS STEP. Every check before it proves the bundle
           # starts and can read its own version. None of them proves Qt can put
           # pixels on a screen -- and the interesting exclusions in hello.spec
           # are exactly the ones that break rendering rather than startup.
           #
-          # ⚠️ A GitHub Windows runner has NO GPU. That makes it the honest test
+          # A GitHub Windows runner has NO GPU. That makes it the honest test
           # for whether opengl32sw.dll is needed: if the window paints without
           # it, a widgets application really is using the raster engine.
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -313,7 +313,7 @@ jobs:
           if ($proc.MainWindowHandle -eq 0) { throw "no main window appeared within 20 s" }
           Start-Sleep -Seconds 2    # let the first paint settle
 
-          # ⚠️ Capture the WINDOW, not the desktop. A full-screen grab on a CI
+          # Capture the WINDOW, not the desktop. A full-screen grab on a CI
           # runner is mostly somebody else's log output, and on any other machine
           # it is whatever the operator had open -- which is how an ordinary
           # screenshot ends up publishing a desktop. Crop at the source.
@@ -365,7 +365,7 @@ jobs:
             Where-Object { $_.Name -ne 'Uninstall.exe' }
           if ($left) { throw "uninstall left $($left.Count) file(s) behind" }
 
-      # ⚠️ retention-days: 1 on all three. Artifacts bill against the account's
+      # retention-days: 1 on all three. Artifacts bill against the account's
       # storage quota for as long as they live, and nothing here is worth
       # keeping past the run that produced it -- the installer is reproducible
       # from the tag and the manifest is regenerated on every build.

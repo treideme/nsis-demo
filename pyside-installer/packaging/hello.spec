@@ -75,14 +75,14 @@ EXCLUDE_MODULES = [
     #
     # The reason is one line in the standard library:
     #
-    #     random.py:  from hashlib import sha512 as _sha512
+    # random.py:  from hashlib import sha512 as _sha512
     #
     # So excluding hashlib breaks `import random`, and random is imported all
     # over the stdlib. **libcrypto-3.dll, at 5.1 MB, is therefore NOT
     # prunable**: _hashlib links it as well as _ssl, and _hashlib has to stay.
     # A hello-world GUI application ships 5 MB of OpenSSL because random wants
     # a SHA-512, and there is no exclusion that fixes it.
-    #     "hashlib", "_hashlib",   <- do not
+    # "hashlib", "_hashlib",   <- do not
 ]
 
 # --- binaries and data to drop, matched as stems -----------------------------
@@ -106,7 +106,7 @@ DROP_STEMS = [
     "Qt6Designer",
     "Qt63D",
     # The binding is excluded above, so the library has nothing to bind to.
-    # 1.9 MB. ⚠If Qt6Gui imports it statically on Windows this will fail at
+    # 1.9 MB. If Qt6Gui imports it statically on Windows this will fail at
     # startup with a named missing-DLL error, which the screenshot step catches.
     "Qt6OpenGL",
     # 0.59 MB, and only the qsvg/qsvgicon plugins above use it.
@@ -115,7 +115,7 @@ DROP_STEMS = [
 
 # Windows ships TWO platform plugins and needs one. qdirect2d is the Direct2D
 # alternative, 1.0 MB; qwindows is the default and is the one that must never be
-# pruned. ⚠️ Dropping qdirect2d is safe only while qwindows stays -- CI asserts
+# pruned. NOTE: dropping qdirect2d is safe only while qwindows stays -- CI asserts
 # qwindows is present for exactly this reason.
 DROP_PLUGINS = [
     "qdirect2d.dll",
@@ -140,7 +140,7 @@ DROP_FILES = [
 # them is worse than merely wasteful: they are separate entry points a user or a
 # malware scanner can find in your install directory.
 #
-# ⚠They are NOT matched by the Qt6* stems above, because they are executables
+# They are NOT matched by the Qt6* stems above, because they are executables
 # rather than libraries -- which is exactly why they survived the first version
 # of this list unnoticed.
 DROP_EXES = [
