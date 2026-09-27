@@ -1,7 +1,8 @@
 # nsis-demo
 
-A small [NSIS](https://nsis.sourceforge.io/) installer project built to accompany a blog post touring
-NSIS's feature set. It's exercised entirely by GitHub Actions on `windows-latest`:
+A small [NSIS](https://nsis.sourceforge.io/) installer project built to accompany 
+[a blog post touring NSIS's feature set](https://reidemeister.com/blog/2026.02.07). 
+It's exercised entirely by GitHub Actions on `windows-latest`:
 
 - `install.nsi` builds a real GUI installer (Modern UI 2) that installs a stand-in "app"
   (`notepad.exe`, copied from the runner itself at build time - never committed here) plus the
@@ -13,6 +14,8 @@ NSIS's feature set. It's exercised entirely by GitHub Actions on `windows-latest
   and uploads the installer, the screenshot, and the installed file tree as run artifacts.
 - [`.github/workflows/release.yml`](.github/workflows/release.yml) does the same build on a `vX.Y.Z`
   tag push and attaches the installer plus the matching release notes to a GitHub Release.
+- [2026 September update](pyside-installer/README.md): Fully packaged python GUI application demonstrating an installer for a 
+  Python application. 
 
 ## Cutting a release
 

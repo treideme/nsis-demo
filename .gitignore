@@ -3,3 +3,13 @@ stage/
 !stage/.gitkeep
 installed-files.zip
 install-screenshot.png
+
+# pyside-installer build outputs. `stage/` and `*.exe` above already cover some
+# of this; these are the rest, and vc_redist.x64.exe is a 25 MB download that CI
+# fetches fresh each run.
+pyside-installer/dist/
+pyside-installer/build/
+pyside-installer/.venv/
+pyside-installer/vc_redist.x64.exe
+__pycache__/
+*.pyc

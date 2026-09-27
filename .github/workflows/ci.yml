@@ -9,7 +9,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Determine version
         id: version
@@ -118,4 +118,274 @@ jobs:
         with:
           name: installed-files
           path: installed-files.zip
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # The second installer: a real PySide6 application rather than notepad.exe.
+  #
+  # Action versions checked against each project's releases API on 2026-09-26:
+  # actions/checkout       v7.0.1  (2026-07-20)
+  # actions/setup-python   v7.0.0  (2026-07-20)
+  # actions/upload-artifact v7
+  # Pinned to the major so fixes arrive without a commit here. If you are reading
+  # this a year later, re-check rather than trusting the numbers.
+  #
+  # This job exists because the interesting half of packaging a Python GUI
+  # application cannot be tested on Linux: PyInstaller produces a binary for the
+  # platform it runs on, so a Windows installer needs a Windows build to wrap.
+  # The whole chain runs here, or it is not actually verified anywhere.
+  pyside-installer:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyside-installer/requirements.txt
+
+      - name: Install build dependencies
+        working-directory: pyside-installer
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+
+      - name: Stage the VC++ redistributable
+        shell: pwsh
+        run: |
+          # installer.nsi looks for it one level above SRC and skips the section
+          # if it is absent, so this step is what exercises the chain-install path
+          # rather than the skip path.
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" `
+            -OutFile pyside-installer\vc_redist.x64.exe
+
+      - name: Build application, manifest and installer
+        working-directory: pyside-installer
+        env:
+          # Prints the largest surviving entries with their dest paths. On while
+          # the Windows exclusions are being tuned -- the counts alone cannot
+          # tell you WHICH pattern failed to match.
+          HELLO_DUMP_TOC: '1'
+        run: python build.py
+
+      - name: Smoke-test the frozen application
+        shell: pwsh
+        working-directory: pyside-installer
+        run: |
+          # "the file exists" is not a test, and neither is reading stdout.
+          # This is built console=False, so the process has NO console attached:
+          # print() goes nowhere, a pipe returns an empty string, and the exit
+          # code is still 0. Grepping that output passes vacuously on a bundle
+          # that is broken. So --report writes to a file instead.
+          # AND `&` DOES NOT WAIT FOR IT. This is built for the Windows GUI
+          # subsystem, so the shell launches it and returns immediately:
+          # $LASTEXITCODE is never set, `$null -ne 0` is true, and the check
+          # fails with the empty string in the message. Start-Process -Wait is
+          # the only form that both blocks and yields a real exit code.
+          $report = "$env:RUNNER_TEMP\version.txt"
+          $p = Start-Process -FilePath .\dist\HelloNsis\HelloNsis.exe `
+            -ArgumentList '--report', $report -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "frozen application exited $($p.ExitCode)" }
+          if (-not (Test-Path $report)) { throw "the application produced no report file" }
+          $out = Get-Content $report -Raw
+          Write-Host $out
+          foreach ($needle in @('Hello, world.', 'Application 1.0.0', 'Qt 6.', 'Python 3.12')) {
+            if ($out -notmatch [regex]::Escape($needle)) { throw "missing from report: $needle" }
+          }
+
+      - name: Report bundle size and assert the exclusions held
+        shell: pwsh
+        working-directory: pyside-installer
+        run: |
+          # The exclusion list is a CLAIM until something checks it. A wrong
+          # stem silently keeps the file, the bundle grows, and the build is
+          # green. These are the three groups whose absence is worth asserting,
+          # because each was found surviving an earlier version of the list.
+          $bundle = 'dist\HelloNsis'
+          $size = (Get-ChildItem $bundle -Recurse -File | Measure-Object -Sum Length)
+          Write-Host ("bundle: {0:N1} MB across {1} files" -f ($size.Sum/1MB), $size.Count)
+
+          # Qt's developer toolchain. 14 executables, 12.2 MB in the wheel.
+          # Not matched by the Qt6* library stems, which is how they survived.
+          $devTools = @('qmlls.exe','qmlformat.exe','assistant.exe','linguist.exe',
+                        'lupdate.exe','lrelease.exe','designer.exe','uic.exe',
+                        'qmltyperegistrar.exe','qmlimportscanner.exe','rcc.exe',
+                        'qmllint.exe','qmlcachegen.exe','svgtoqml.exe')
+          $found = Get-ChildItem $bundle -Recurse -File |
+            Where-Object { $devTools -contains $_.Name }
+          if ($found) {
+            throw ("Qt developer tools shipped in the bundle: " + ($found.Name -join ', '))
+          }
+
+          # Chromium's ICU data, 10 MB, used only by QtWebEngine.
+          if (Get-ChildItem $bundle -Recurse -Filter 'icudtl.dat') {
+            throw "icudtl.dat shipped; WebEngine is excluded so it is dead weight"
+          }
+
+          # QML, which this widgets-only application never mentions.
+          if (Get-ChildItem $bundle -Recurse -Filter 'Qt6Quick*.dll') {
+            throw "Qt6Quick shipped in a QtWidgets-only application"
+          }
+
+          # And the inverse: the platform plugin MUST be present. An
+          # exclusion list that removes it produces a bundle that builds
+          # perfectly and cannot start.
+          if (-not (Get-ChildItem $bundle -Recurse -Filter 'qwindows.dll')) {
+            throw "the Qt windows platform plugin was pruned; the app cannot start"
+          }
+
+      - name: Check the manifest was generated, not committed
+        shell: pwsh
+        working-directory: pyside-installer
+        run: |
+          $manifest = 'dist\THIRD-PARTY-LICENSES.txt'
+          if (-not (Test-Path $manifest)) { throw "licence manifest was not generated" }
+          $text = Get-Content $manifest -Raw
+          # PySide6 must be named, and nothing may be left UNKNOWN -- an UNKNOWN
+          # row means a metadata field moved and licenses.py did not notice.
+          if ($text -notmatch 'PySide6')  { throw "manifest does not name PySide6" }
+          if ($text -match 'UNKNOWN')     { throw "manifest has a component with no licence metadata" }
+          python packaging\licenses.py --audit
+
+      - name: Install silently and verify
+        shell: pwsh
+        working-directory: pyside-installer
+        run: |
+          # /S rather than the root installer's GUI automation. There is nothing
+          # to screenshot here and a silent install is the mode a fleet uses.
+          $setup = Resolve-Path dist\HelloNsisSetup.exe
+          $proc = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "installer exited $($proc.ExitCode)" }
+
+          $installDir = "$env:ProgramFiles\Reidemeister Labs\Hello NSIS"
+          foreach ($f in @('HelloNsis.exe', 'Uninstall.exe', 'THIRD-PARTY-LICENSES.txt')) {
+            if (-not (Test-Path "$installDir\$f")) { throw "not installed: $f" }
+          }
+          # The Qt libraries must have arrived in their subdirectory. File /r is
+          # what puts them there, and a non-recursive copy passes every check
+          # above while producing an application that cannot start.
+          if (-not (Test-Path "$installDir\_internal")) { throw "_internal was not installed" }
+          $plugins = Get-ChildItem "$installDir\_internal" -Recurse -Filter 'qwindows.dll'
+          if (-not $plugins) { throw "the Qt windows platform plugin was not installed" }
+
+          # And run what was installed, not what was built. These are
+          # different files by the time the installer has been through them.
+          $report = "$env:RUNNER_TEMP\installed.txt"
+          $p = Start-Process -FilePath "$installDir\HelloNsis.exe" `
+            -ArgumentList '--report', $report -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installed application exited $($p.ExitCode)" }
+          if (-not (Test-Path $report)) { throw "the installed application produced no report" }
+          $out = Get-Content $report -Raw
+          Write-Host $out
+          if ($out -notmatch 'Hello, world\.') { throw "the installed application did not run" }
+
+      - name: Photograph the installed application
+        shell: pwsh
+        run: |
+          # THE POINT OF THIS STEP. Every check before it proves the bundle
+          # starts and can read its own version. None of them proves Qt can put
+          # pixels on a screen -- and the interesting exclusions in hello.spec
+          # are exactly the ones that break rendering rather than startup.
+          #
+          # A GitHub Windows runner has NO GPU. That makes it the honest test
+          # for whether opengl32sw.dll is needed: if the window paints without
+          # it, a widgets application really is using the raster engine.
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $installDir = "$env:ProgramFiles\Reidemeister Labs\Hello NSIS"
+
+          # --quit-after means the app closes itself, so the exit code still
+          # means something. Killing it would throw that away.
+          $proc = Start-Process -FilePath "$installDir\HelloNsis.exe" `
+            -ArgumentList '--quit-after', '25' -PassThru
+
+          # Wait for a real window rather than sleeping a guessed interval.
+          $deadline = (Get-Date).AddSeconds(20)
+          while ((Get-Date) -lt $deadline) {
+            $proc.Refresh()
+            if ($proc.HasExited) { throw "the application exited before it drew a window" }
+            if ($proc.MainWindowHandle -ne 0) { break }
+            Start-Sleep -Milliseconds 250
+          }
+          if ($proc.MainWindowHandle -eq 0) { throw "no main window appeared within 20 s" }
+          Start-Sleep -Seconds 2    # let the first paint settle
+
+          # Capture the WINDOW, not the desktop. A full-screen grab on a CI
+          # runner is mostly somebody else's log output, and on any other machine
+          # it is whatever the operator had open -- which is how an ordinary
+          # screenshot ends up publishing a desktop. Crop at the source.
+          Add-Type -Name Win -Namespace Native -MemberDefinition @'
+            [StructLayout(LayoutKind.Sequential)]
+            public struct RECT { public int Left, Top, Right, Bottom; }
+            [DllImport("user32.dll")]
+            public static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
+            [DllImport("user32.dll")]
+            public static extern bool SetForegroundWindow(IntPtr hWnd);
+          '@
+          [Native.Win]::SetForegroundWindow($proc.MainWindowHandle) | Out-Null
+          Start-Sleep -Milliseconds 500
+
+          $r = New-Object Native.Win+RECT
+          if (-not [Native.Win]::GetWindowRect($proc.MainWindowHandle, [ref]$r)) {
+            throw "could not read the window rectangle"
+          }
+          $pad = 12
+          $x = [Math]::Max(0, $r.Left - $pad)
+          $y = [Math]::Max(0, $r.Top - $pad)
+          $w = ($r.Right - $r.Left) + 2 * $pad
+          $h = ($r.Bottom - $r.Top) + 2 * $pad
+          if ($w -lt 50 -or $h -lt 50) { throw "window rectangle is implausible: ${w}x${h}" }
+          Write-Host ("window at {0},{1} size {2}x{3}" -f $r.Left, $r.Top, ($r.Right-$r.Left), ($r.Bottom-$r.Top))
+
+          $bmp = New-Object System.Drawing.Bitmap $w, $h
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($x, $y, 0, 0, (New-Object System.Drawing.Size $w, $h))
+          $bmp.Save("$env:GITHUB_WORKSPACE\app-screenshot.png",
+                    [System.Drawing.Imaging.ImageFormat]::Png)
+          $g.Dispose(); $bmp.Dispose()
+
+          $proc.WaitForExit(40000)
+          if (-not $proc.HasExited) { throw "the application did not close itself" }
+          if ($proc.ExitCode -ne 0) { throw "the application exited $($proc.ExitCode)" }
+          Write-Host "screenshot taken, application exited 0"
+
+      - name: Uninstall and verify removal
+        shell: pwsh
+        run: |
+          $installDir = "$env:ProgramFiles\Reidemeister Labs\Hello NSIS"
+          $proc = Start-Process -FilePath "$installDir\Uninstall.exe" `
+            -ArgumentList '/S', "_?=$installDir" -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "uninstaller exited $($proc.ExitCode)" }
+          # Uninstall.exe deletes itself only when not run with _?=, so the
+          # directory can legitimately survive with that one file in it.
+          $left = Get-ChildItem $installDir -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ne 'Uninstall.exe' }
+          if ($left) { throw "uninstall left $($left.Count) file(s) behind" }
+
+      # retention-days: 1 on all three. Artifacts bill against the account's
+      # storage quota for as long as they live, and nothing here is worth
+      # keeping past the run that produced it -- the installer is reproducible
+      # from the tag and the manifest is regenerated on every build.
+      - name: Upload the application screenshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-screenshot
+          path: app-screenshot.png
+          retention-days: 1
+
+      - name: Upload the PySide6 installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: pyside-installer
+          path: pyside-installer/dist/HelloNsisSetup.exe
+          retention-days: 1
+
+      - name: Upload the licence manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: third-party-licenses
+          path: pyside-installer/dist/THIRD-PARTY-LICENSES.txt
           retention-days: 1

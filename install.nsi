@@ -9,6 +9,7 @@
 ;   - A full uninstaller with Add/Remove Programs registration
 ;
 ; https://github.com/treideme/nsis-demo
+; (C) 2026 Thomas Reidemeister
 ;----------------------------------------------------------------------------------------------------------------------
 
 !define COMPANYNAME "Reidemeister Labs"
