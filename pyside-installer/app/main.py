@@ -1,13 +1,6 @@
 """A PySide6 window holding a greeting and the versions of what is around it.
-
-Deliberately trivial. The subject of this directory is the packaging, and an
-application with real dependencies makes it impossible to tell which of
-PyInstaller's decisions were forced by Qt and which by the application.
-
-Reporting the Qt and Python versions at run time is not decoration: it is how
-you tell what actually ended up inside the bundle, as opposed to what the build
-machine had installed.
 """
+__author__ = "Thomas Reidemeister"
 
 import sys
 

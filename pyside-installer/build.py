@@ -16,6 +16,7 @@ Usage:
     python build.py                 # everything available on this platform
     python build.py --skip-installer  # stop after PyInstaller and the manifest
 """
+__author__ = "Thomas Reidemeister"
 
 import argparse
 import os
@@ -114,11 +115,6 @@ def compile_installer(version):
             "/DLICENSE_THIRDPARTY=%s" % MANIFEST,
             "/DOUT=%s" % out]
 
-    # 🔴 The redistributable's presence has to be decided HERE, not in the NSIS
-    # script. `File` is a compile-time directive, so `${If} ${FileExists}` cannot
-    # guard it -- makensis embeds the file while compiling and fails the build on
-    # a missing path regardless of any runtime condition. Passing the define
-    # conditionally moves the decision to a language that can make it.
     redist = os.path.join(HERE, "vc_redist.x64.exe")
     if os.path.exists(redist):
         argv.append("/DVCREDIST=%s" % redist)

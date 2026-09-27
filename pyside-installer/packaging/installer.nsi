@@ -13,6 +13,7 @@
 ;   - Chain-installing the VC++ Redistributable, and the coupling that creates
 ;
 ; https://github.com/treideme/nsis-demo
+; (C) 2026 Thomas Reidemeister
 ;----------------------------------------------------------------------------------------------------------------------
 
 !define COMPANYNAME "Reidemeister Labs"
@@ -20,7 +21,7 @@
 !define SHORTNAME "hellonsis"
 !define ENTRYPOINT "HelloNsis.exe"
 
-; ⚠️ VERSION is passed in by build.py, which reads it from app/version.py. The
+; VERSION is passed in by build.py, which reads it from app/version.py. The
 ; fallback exists so a bare `makensis installer.nsi` still compiles for a syntax
 ; check, and 0.0.0 is chosen to be obviously wrong rather than plausibly stale.
 !ifndef VERSION
@@ -56,7 +57,7 @@ RequestExecutionLevel admin
 ;----------------------------------------------------------------------------------------------------------------------
 ; Version resource number TWO.
 ;
-; 🔴 There are two version resources for one version number, and nothing
+; There are two version resources for one version number, and nothing
 ; connects them. This one goes on the installer executable. The other goes on
 ; the application executable and is written by PyInstaller from the file that
 ; packaging/version.j2 renders. Both are generated from app/version.py by
@@ -90,7 +91,7 @@ VIAddVersionKey /LANG=0 "ProductVersion" "${VERSION}.0"
 ; informed of. MUI2 has no "notice" page, so a licence page with its button text
 ; rewritten is the closest honest fit.
 ;
-; ⚠️ The manifest is GENERATED at build time by packaging/licenses.py from the
+; The manifest is GENERATED at build time by packaging/licenses.py from the
 ; metadata of the environment that produced the build. A hand-maintained list is
 ; wrong the first time a transitive dependency changes, and wrong quietly.
 !insertmacro MUI_PAGE_LICENSE "${LICENSE_APP}"
@@ -169,7 +170,7 @@ SectionEnd
 
 ;----------------------------------------------------------------------------------------------------------------------
 Section "Visual C++ Runtime" SecVCRedist
-  ; 🔴 THIS SECTION IS COUPLED TO packaging/hello.spec, AND NOTHING ENFORCES IT.
+  ; THIS SECTION IS COUPLED TO packaging/hello.spec, AND NOTHING ENFORCES IT.
   ;
   ; CPython on Windows is built against the Universal CRT, so the bundle needs
   ; VCRUNTIME140.dll and friends. There are exactly two ways to satisfy that,
@@ -187,22 +188,6 @@ Section "Visual C++ Runtime" SecVCRedist
   ; adds those DLLs to the spec's exclusion list, the application has to keep
   ; starting.
   ;
-  ; ⚠️ If you delete this section, read hello.spec's DROP_STEMS first. The failure
-  ; mode is an application that will not start, with an error naming the Python
-  ; bundle rather than the installer script that used to fix it -- which is
-  ; exactly the wrong place to go looking.
-  ; 🔴 `${FileExists}` IS A RUNTIME CHECK AND CANNOT GUARD `File`, WHICH IS A
-  ; COMPILE-TIME DIRECTIVE. The first version of this section wrapped the File
-  ; below in ${If} ${FileExists} and looked perfectly reasonable. makensis
-  ; evaluates File while compiling, ignores the runtime condition entirely, and
-  ; failed the build with "no files found" on a path that would only have been
-  ; consulted at install time.
-  ;
-  ; The two languages in this file are easy to confuse: `!` directives and
-  ; `${...}` defines run in the preprocessor, everything else runs on the user's
-  ; machine. So the existence decision is made by build.py, which passes
-  ; /DVCREDIST only when the file is actually staged, and `!ifdef` keeps the
-  ; embedding out of the compiled installer otherwise.
 !ifdef VCREDIST
   SetRegView 64
   ReadRegDWORD $0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" "Installed"

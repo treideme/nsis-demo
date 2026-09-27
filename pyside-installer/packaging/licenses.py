@@ -16,6 +16,7 @@ THREE PLACES A LICENCE CAN HIDE, and reading only the first is the classic bug:
 Reading only `License` was how the predecessor of this script reported "UNKNOWN"
 for most of the tree while looking like it had worked.
 """
+__author__ = "Thomas Reidemeister"
 
 import argparse
 import sys

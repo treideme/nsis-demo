@@ -26,6 +26,7 @@ TWO THINGS THIS SPEC DOES DIFFERENTLY from the usual hand-maintained blacklist:
      nothing looks exactly like a clean build. See the CHECK block at the end,
      which fails the build rather than quietly shipping 195 MB.
 """
+__author__ = "Thomas Reidemeister"
 
 import os
 import sys
@@ -63,12 +64,12 @@ EXCLUDE_MODULES = [
     "unittest",
     "pydoc_data",
     "lib2to3",
-    # ✅ FROM THE WINDOWS TOC DUMP, not from a guess. libssl-3.dll is collected
+    # FROM THE WINDOWS TOC DUMP, not from a guess. libssl-3.dll is collected
     # because PyInstaller found Python's _ssl, in an application that opens no
     # sockets.
     "ssl",
     "_ssl",
-    # 🔴 AND HERE IS WHERE THAT STOPS. `hashlib` and `_hashlib` were on this
+    # AND HERE IS WHERE THAT STOPS. `hashlib` and `_hashlib` were on this
     # list for one run and the frozen application died on startup with
     # 0xC0000409, a fast-fail with no message and nothing in the log.
     #
@@ -77,7 +78,7 @@ EXCLUDE_MODULES = [
     #     random.py:  from hashlib import sha512 as _sha512
     #
     # So excluding hashlib breaks `import random`, and random is imported all
-    # over the stdlib. ⚠️ **libcrypto-3.dll, at 5.1 MB, is therefore NOT
+    # over the stdlib. **libcrypto-3.dll, at 5.1 MB, is therefore NOT
     # prunable**: _hashlib links it as well as _ssl, and _hashlib has to stay.
     # A hello-world GUI application ships 5 MB of OpenSSL because random wants
     # a SHA-512, and there is no exclusion that fixes it.
@@ -85,7 +86,7 @@ EXCLUDE_MODULES = [
 ]
 
 # --- binaries and data to drop, matched as stems -----------------------------
-# 🔴 qwindows / qxcb / qwayland are NOT here, and must never be. The platform
+# qwindows / qxcb / qwayland are NOT here, and must never be. The platform
 # abstraction plugin is the one Qt cannot start without: prune it and the
 # application dies before any of your code runs, with
 # "could not load the Qt platform plugin" and no mention of the file you cut.
@@ -104,8 +105,8 @@ DROP_STEMS = [
     "Qt6Test",
     "Qt6Designer",
     "Qt63D",
-    # ✅ The binding is excluded above, so the library has nothing to bind to.
-    # 1.9 MB. ⚠️ If Qt6Gui imports it statically on Windows this will fail at
+    # The binding is excluded above, so the library has nothing to bind to.
+    # 1.9 MB. ⚠If Qt6Gui imports it statically on Windows this will fail at
     # startup with a named missing-DLL error, which the screenshot step catches.
     "Qt6OpenGL",
     # 0.59 MB, and only the qsvg/qsvgicon plugins above use it.
@@ -120,7 +121,7 @@ DROP_PLUGINS = [
     "qdirect2d.dll",
 ]
 
-# ✅ WINDOWS-ONLY, AND THE BIGGEST SINGLE WIN AVAILABLE. Read out of the
+# WINDOWS-ONLY, AND THE BIGGEST SINGLE WIN AVAILABLE. Read out of the
 # win_amd64 wheel on 2026-09-26: icudtl.dat is 10.0 MB and is Chromium's ICU
 # data, used by QtWebEngine. This application excludes WebEngine entirely, so it
 # is dead weight. (There is no libicu on Windows at all -- Qt uses the native
@@ -130,7 +131,7 @@ DROP_FILES = [
     "icudtl.dat",
 ]
 
-# 🔴 THE WINDOWS WHEEL SHIPS QT'S DEVELOPER TOOLCHAIN: 14 executables, 12.2 MB,
+# THE WINDOWS WHEEL SHIPS QT'S DEVELOPER TOOLCHAIN: 14 executables, 12.2 MB,
 # read out of pyside6_essentials-6.11.2-cp310-abi3-win_amd64.whl on 2026-09-26.
 # `designer.exe`, `linguist.exe` and `assistant.exe` are GUI applications in
 # their own right; `uic`, `rcc` and the qml* tools are build-time compilers.
@@ -139,7 +140,7 @@ DROP_FILES = [
 # them is worse than merely wasteful: they are separate entry points a user or a
 # malware scanner can find in your install directory.
 #
-# ⚠️ They are NOT matched by the Qt6* stems above, because they are executables
+# ⚠They are NOT matched by the Qt6* stems above, because they are executables
 # rather than libraries -- which is exactly why they survived the first version
 # of this list unnoticed.
 DROP_EXES = [
@@ -149,39 +150,15 @@ DROP_EXES = [
     "qmllint.exe", "qmlcachegen.exe", "svgtoqml.exe",
 ]
 
-# 🔴 19.7 MB, the LARGEST file in the Windows wheel -- bigger than Qt6Core.dll.
+# 19.7 MB, the LARGEST file in the Windows wheel -- bigger than Qt6Core.dll.
 # opengl32sw.dll is the Mesa llvmpipe software OpenGL fallback, which is what Qt
 # uses when the machine has no usable GPU driver.
-#
-# ⚠️ DEFAULT IS FALSE ON PURPOSE. Dropping it saves more than every Qt module
-# exclusion in this file put together, and it is the one exclusion here that can
-# fail on a user's machine rather than on yours: a widgets-only app does not
-# render through OpenGL, right up until it lands on a VM, an RDP session or a
-# fresh install with only the Microsoft Basic Display driver. The failure is a
-# blank window, at the customer, and the build that produced it worked fine.
-#
-# Set it True if you know your fleet, and know that you are buying 19.7 MB with
-# a support risk rather than getting it free.
-# ⚠️ FLIPPED TO TRUE 2026-09-26, and the CI screenshot is what justifies it.
-# A GitHub Windows runner has no GPU, so it is the exact machine this fallback
-# exists for. If the window renders there without opengl32sw.dll, a widgets-only
-# application really is going through the raster engine and the 19.7 MB is dead
-# weight. If it does not, the screenshot step fails and this goes back to False
-# -- which is a better answer than either guess.
 DROP_SOFTWARE_OPENGL = True
 
-# 🔴 DIRECTORIES ARE MATCHED BY SEGMENT, NOT BY PREFIX, AND THAT IS NOT
+# DIRECTORIES ARE MATCHED BY SEGMENT, NOT BY PREFIX, AND THAT IS NOT
 # PEDANTRY. The first version of this list used full prefixes copied from a
 # Linux build -- `PySide6/Qt/qml`, `PySide6/Qt/translations`. On Windows the
 # wheel puts those at `PySide6/qml` and `PySide6/translations`, one level up.
-#
-# Measured on a Windows runner 2026-09-26: the prefix form dropped
-# **datas 97 -> 97**, which is to say nothing at all, while the same spec on
-# Linux dropped 105 data entries. The build was green both times.
-#
-# ⚠️ This is the exact failure this file's own docstring claims to avoid. Stems
-# were platform-independent; the directory list was not, and "one list serves
-# both platforms" was half true in a way no Linux run could reveal.
 DROP_SEGMENTS = [
     "qml",              # 1,762 files / 19.0 MB in the Windows wheel
     "translations",     # 196 files / 13.1 MB
@@ -191,10 +168,10 @@ DROP_SEGMENTS = [
     "qmltooling",
     "designer",
     "webengine",
-    # ✅ 2.2 MB of image codecs -- qjpeg, qwebp, qtiff, qgif, qicns, qtga, qsvg
+    # 2.2 MB of image codecs -- qjpeg, qwebp, qtiff, qgif, qicns, qtga, qsvg
     # -- in an application whose entire interface is four text labels. Qt loads
     # these lazily when something asks it to decode an image, and nothing here
-    # ever does. ⚠️ Add them back the moment this window grows an icon or a
+    # ever does. Add them back the moment this window grows an icon or a
     # QPixmap: the failure is a silently blank image, not an error.
     "imageformats",
     "iconengines",
@@ -224,11 +201,6 @@ def unwanted(dest):
     # Whole path components, so the depth of the layout does not matter.
     return any(seg in flat.split("/")[:-1] for seg in DROP_SEGMENTS)
 
-
-# PyInstaller 6 dropped `cipher`, `win_no_prefer_redirects` and
-# `win_private_assemblies`. A spec written for 5.x still runs -- they are
-# accepted and ignored -- which is why stale specs survive a major upgrade
-# without anyone noticing they are carrying dead arguments.
 a = Analysis(
     ["../app/main.py"],
     pathex=[".."],
@@ -255,11 +227,7 @@ removed = (before[0] - after[0]) + (before[1] - after[1])
 print("[spec] binaries %d -> %d, datas %d -> %d (%d entries dropped)"
       % (before[0], after[0], before[1], after[1], removed))
 
-# ✅ Set HELLO_DUMP_TOC=1 to print what SURVIVED, largest first. Added because
-# the exclusion list silently matched nothing on Windows while the build stayed
-# green: the counts above tell you something is wrong, and only the dest paths
-# tell you what. Cheap, off by default, and the first thing to reach for when a
-# bundle is the wrong size on a platform you cannot run locally.
+# Set HELLO_DUMP_TOC=1 to print what SURVIVED, largest first.
 if os.environ.get("HELLO_DUMP_TOC"):
     rows = []
     for dest, src, _kind in list(a.binaries) + list(a.datas):
@@ -271,7 +239,7 @@ if os.environ.get("HELLO_DUMP_TOC"):
     for size, dest in sorted(rows, reverse=True)[:30]:
         print("[spec]   %9.2f KB  %s" % (size / 1024.0, dest))
 
-# 🔴 A pattern list that matches nothing is indistinguishable from a tidy build.
+# A pattern list that matches nothing is indistinguishable from a tidy build.
 # Fail here instead: a wrong stem, a renamed directory or a Qt reorganisation all
 # show up as this assertion rather than as an installer that is quietly 195 MB.
 if removed == 0:
@@ -306,7 +274,7 @@ exe = EXE(
     icon=os.environ.get("HELLO_ICON") or None,
 )
 
-# 🔴 COLLECT, not a one-file EXE, and this is a licence decision rather than a
+# COLLECT, not a one-file EXE, and this is a licence decision rather than a
 # packaging preference. The LGPL asks that the user be able to replace the
 # library; a --onefile build unpacks to a temporary directory at every launch,
 # so there is no Qt DLL on disk for anyone to substitute. One directory also
